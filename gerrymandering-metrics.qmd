@@ -5,6 +5,79 @@ format: typst
 
 ### 2024 Election Results and the 2024 District Map
 
+```{r}
+precinct_clean <- g24_sov_by_g24_svprec |>
+  mutate(
+    district = paste0("CA-", str_pad(CDDIST, 2, pad = "0")),
+    dem = as.numeric(DEMVOTE),
+    rep = as.numeric(REPVOTE)
+  ) |>
+  select(district, dem, rep)
+
+district_votes <- precinct_clean |>
+  group_by(district) |>
+  summarize(
+    dem = sum(dem, na.rm = TRUE),
+    rep = sum(rep, na.rm = TRUE)
+  ) |>
+  mutate(
+    total = dem + rep,
+    dem_share = dem / total
+  ) |>
+  filter(total > 0)   
+
+```
+
+```{r}
+mean_median <- mean(district_votes$dem_share, na.rm = TRUE) -
+               median(district_votes$dem_share, na.rm = TRUE)
+
+mean_median
+
+```
+
+```{r}
+wasted_votes_safe <- function(vA, vB) {
+
+  total <- vA + vB
+  half  <- total / 2
+
+  if (vA > vB) {
+    tibble(wasted_A = vA - half,
+           wasted_B = vB)
+  } else {
+    tibble(wasted_A = vA,
+           wasted_B = vB - half)
+  }
+}
+
+```
+
+```{r}
+waste_table <- district_votes |>
+  rowwise() |>
+  do(bind_cols(., wasted_votes_safe(.$dem, .$rep))) |>
+  ungroup()
+
+```
+
+```{r}
+efficiency_gap <- (sum(waste_table$wasted_B) - 
+                   sum(waste_table$wasted_A)) /
+                   sum(district_votes$total)
+
+efficiency_gap
+
+```
+
+```{r}
+tibble(
+  metric = c("Mean–Median Score", "Efficiency Gap"),
+  value = c(mean_median, efficiency_gap)
+)
+
+```
+
 
 
 ### 2024 Election Results and the proposed 2025 District Map

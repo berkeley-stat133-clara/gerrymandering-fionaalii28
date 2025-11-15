@@ -3,26 +3,40 @@ title: Exploratory Data Analysis
 format: typst
 ---
 
-### Question 1
 
-Put your question here.
+```{r}
+district_totals <- g24_results_clean |>
+  group_by(district, party) |>
+  summarize(total_votes = sum(votes, na.rm = TRUE), .groups = "drop") |>
+  pivot_wider(names_from = party, values_from = total_votes) |>
+  mutate(
+    margin = abs(DEM - REP),
+    winner = ifelse(DEM > REP, "DEM", "REP")
+  )
 
-### Answer 1
+closest_races <- district_totals |>
+  arrange(margin) |>
+  slice(1:5)
 
-Put your answer here.
+closest_races
 
-### Question 2
+```
 
-Put your question here.
+```{r}
+biggest_blowouts <- district_totals |>
+  arrange(desc(margin)) |>
+  slice(1:5)
 
-### Answer 2
+biggest_blowouts
 
-Put your answer here.
+```
 
-### Question 3
+```{r}
+same_party_districts <- g24_results_clean |>
+  group_by(district) |>
+  summarize(num_parties = n_distinct(party)) |>
+  filter(num_parties == 1)
 
-Put your question here.
+same_party_districts
 
-### Answer 3
-
-Put your answer here.
+```

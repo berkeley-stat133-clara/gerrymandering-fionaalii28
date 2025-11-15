@@ -3,3 +3,108 @@ title: Dashboard
 format: dashboard
 ---
 
+{r}```
+library(tidyverse)
+library(sf)
+library(readr)
+library(knitr)
+library(kableExtra)
+
+district_2024 <- read_csv("data/precinct_2024_map_results.csv")
+district_ab604 <- read_csv("data/ab604_results.csv")
+
+cd_2024 <- st_read("data/shapefiles/cd_2024/cd_2024.shp")
+ab604_map <- st_read("AB604/AB604.shp")
+
+
+# 1. Seats won
+seats_2024 <- district_2024 %>%
+  mutate(winner = ifelse(dem > rep, "DEM", "REP")) %>%
+  count(winner)
+
+seats_ab604 <- district_ab604 %>%
+  mutate(winner = ifelse(dem > rep, "DEM", "REP")) %>%
+  count(winner)
+
+# 2. Mean–Median Score
+mean_median_2024 <- mean(district_2024$dem_share, na.rm = TRUE) -
+                    median(district_2024$dem_share, na.rm = TRUE)
+
+mean_median_ab604 <- mean(district_ab604$dem / district_ab604$total, na.rm = TRUE) -
+                     median(district_ab604$dem / district_ab604$total, na.rm = TRUE)
+
+# 3. Efficiency Gap
+wasted_votes <- function(vA, vB) {
+  total <- vA + vB
+  half <- total / 2
+  
+  if (vA > vB) {
+    c(A = vA - half, B = vB)     # A wins → A wastes surplus, B wastes all
+  } else {
+    c(A = vA, B = vB - half)     # B wins → B wastes surplus, A wastes all
+  }
+}
+
+# efficiency gap for OLD MAP
+eff_gap_2024 <- (sum(district_2024$wasted_rep) - sum(district_2024$wasted_dem)) /
+                 sum(district_2024$total)
+
+# efficiency gap for NEW MAP
+ab604_waste <- district_ab604 %>%
+  rowwise() %>%
+  mutate(
+    waste = list(wasted_votes(dem, rep)),
+    wasted_dem = waste[[1]],
+    wasted_rep = waste[[2]]
+  ) %>%
+  ungroup()
+
+eff_gap_ab604 <- (sum(ab604_waste$wasted_rep) - sum(ab604_waste$wasted_dem)) /
+                  sum(ab604_waste$total)
+
+comparison_table <- tibble(
+  Metric = c("Seats Won (DEM)", "Seats Won (REP)",
+             "Mean–Median Score", "Efficiency Gap"),
+  `2024 Map` = c(
+    seats_2024$n[seats_2024$winner == "DEM"],
+    seats_2024$n[seats_2024$winner == "REP"],
+    round(mean_median_2024, 4),
+    round(eff_gap_2024, 4)
+  ),
+  `AB604 Map` = c(
+    seats_ab604$n[seats_ab604$winner == "DEM"],
+    seats_ab604$n[seats_ab604$winner == "REP"],
+    round(mean_median_ab604, 4),
+    round(eff_gap_ab604, 4)
+  )
+)
+
+comparison_table
+
+
+# 2024 district map
+cd_2024_plot <- cd_2024 %>%
+  ggplot() +
+  geom_sf(fill = "lightgray", color = "white") +
+  ggtitle("California Congressional Districts — 2024 Map") +
+  theme_minimal()
+
+cd_2024_plot
+
+# AB604 proposed map
+ab604_plot <- ab604_map %>%
+  ggplot() +
+  geom_sf(fill = "lightblue", color = "white") +
+  ggtitle("California Congressional Districts — Proposed AB 604 Map") +
+  theme_minimal()
+
+ab604_plot
+
+district_2024 %>%
+  select(district, dem, rep, total) %>%
+  arrange(district)
+
+district_ab604 %>%
+  select(district, dem, rep, total, winner, margin) %>%
+  arrange(district)
+```

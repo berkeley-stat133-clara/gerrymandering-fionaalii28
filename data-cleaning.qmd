@@ -3,4 +3,119 @@ title: Data Cleaning
 format: typst
 ---
 
+```{r}
+g24_sov_by_g24_svprec <- read_csv("Downloads/g24_sov_by_g24_svprec.csv")
+
+g24_candidates_by_district <- read_csv("Downloads/g24-candidates-by-district.csv")
+
+g24_results_by_district <- read_excel("Downloads/g24-results-by-district.xlsx")
+
+```
+
+
+```{r}
+g24_sov_by_g24_svprec_raw <- read_csv("Downloads/g24_sov_by_g24_svprec.csv")
+
+vote_cols <- g24_sov_by_g24_svprec_raw |>
+  select(ends_with("VOTE")) |> 
+  names()
+
+g24_sov_by_g24_svprec <- g24_sov_by_g24_svprec_raw |>
+  mutate(
+    across(all_of(vote_cols), ~ suppressWarnings(as.numeric(.))),
+    
+    SVPREC_KEY = as.character(SVPREC_KEY),
+    SVPREC = as.character(SVPREC),
+    COUNTY = as.character(COUNTY),
+    CDDIST = as.character(CDDIST),
+    ADDIST = as.character(ADDIST)
+  )
+
+```
+
+```{r}
+g24_results_by_district <- g24_results_by_district |>
+  mutate(
+    CONTEST = str_squish(as.character(CONTEST)),
+    FIELD = str_squish(as.character(FIELD)),
+    DISTRICT_TYPE = str_squish(as.character(DISTRICT_TYPE)),
+    DISTRICT = str_squish(as.character(DISTRICT)),
+    NAME = str_squish(as.character(NAME))
+  )
+```
+
+```{r}
+raw <- read_excel("Downloads/g24-results-by-district.xlsx", col_names = FALSE)
+
+district_headers <- which(str_detect(raw[[1]], "Congressional District"))
+
+all_districts <- list()
+
+for (i in seq_along(district_headers)) {
+  
+  start_row <- district_headers[i]
+  end_row <- if (i < length(district_headers)) district_headers[i+1] - 1 else nrow(raw)
+  
+  block <- raw[start_row:end_row, ]
+  
+  block <- block |> mutate(across(everything(), ~ ifelse(. == "", NA, .)))
+  
+  district_name <- block[1,1] |> pull()
+  district_num <- str_extract(district_name, "\\d+")
+  district_id <- paste0("CA-", stringr::str_pad(district_num, 2, pad="0"))
+  
+  dem_candidate <- block[3,2] |> pull() |> str_replace_all("\\r\\n", " ") |> str_squish()
+  rep_candidate <- block[3,3] |> pull() |> str_replace_all("\\r\\n", " ") |> str_squish()
+  
+  dem_party <- block[4,2] |> pull() |> str_squish()
+  rep_party <- block[4,3] |> pull() |> str_squish()
+  
+  county_block <- block[5:nrow(block), ]
+  
+  stop_row <- which(county_block[[1]] == "District Totals")
+  if (length(stop_row) > 0) {
+    county_block <- county_block[1:(stop_row-1), ]
+  }
+  
+  names(county_block) <- c("county", "dem_votes", "rep_votes")
+  
+  county_block <- county_block |>
+    mutate(
+      county = str_squish(as.character(county)),
+      dem_votes = as.numeric(dem_votes),
+      rep_votes = as.numeric(rep_votes)
+    ) |>
+    filter(!is.na(county), county != "")
+  
+  dem_rows <- county_block |>
+    transmute(
+      district = district_id,
+      county,
+      candidate = dem_candidate,
+      party = dem_party,
+      votes = dem_votes
+    )
+  
+  rep_rows <- county_block |>
+    transmute(
+      district = district_id,
+      county,
+      candidate = rep_candidate,
+      party = rep_party,
+      votes = rep_votes
+    )
+  
+  all_districts[[length(all_districts) + 1]] <- bind_rows(dem_rows, rep_rows)
+}
+
+g24_results_clean <- bind_rows(all_districts)
+
+dir.create("data", showWarnings = FALSE)
+write_csv(g24_results_clean, "data/cleaned-2024-district-results.csv")
+
+```
+
+```{r}
+write_csv(g24_results_clean, "data/cleaned-2024-district-results.csv")
+```
 

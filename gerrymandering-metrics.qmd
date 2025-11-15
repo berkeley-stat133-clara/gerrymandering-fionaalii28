@@ -81,4 +81,50 @@ tibble(
 
 
 ### 2024 Election Results and the proposed 2025 District Map
+```{r}
+library(readr)
+state_g24_sov_data_by_g24_srprec <- read_csv("Downloads/state_g24_sov_data_by_g24_srprec.csv")
+```
 
+```{r}
+library(sf)
+library(tidyverse)
+
+list.files()
+
+srprec <- st_read("srprec_state_g24_v01_shp/srprec_state_g24_v01_shp.shp")
+
+ab604 <- st_read("AB604/AB604.shp")
+
+sr_votes <- read_csv("data/g24_sov_by_g24_srprec.csv")
+
+sr_votes_clean <- sr_votes %>%
+  mutate(
+    dem = as.numeric(DEMVOTE),
+    rep = as.numeric(REPVOTE)
+  ) %>%
+  select(SRPREC, dem, rep)
+
+srprec_joined <- srprec %>%
+  left_join(sr_votes_clean, by = c("SRPREC" = "SRPREC"))
+
+srprec_with_new_dist <- st_join(srprec_joined, ab604["DISTRICT_ID"])
+
+ab604_results <- srprec_with_new_dist %>%
+  st_drop_geometry() %>%
+  group_by(DISTRICT_ID) %>%
+  summarize(
+    dem = sum(dem, na.rm = TRUE),
+    rep = sum(rep, na.rm = TRUE),
+    total = dem + rep,
+    winner = ifelse(dem > rep, "DEM", "REP"),
+    margin = abs(dem - rep)
+  ) %>%
+  arrange(DISTRICT_ID)
+
+
+ab604_results
+
+write_csv(ab604_results, "data/ab604_results.csv")
+
+```
